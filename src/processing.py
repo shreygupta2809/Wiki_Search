@@ -1,40 +1,36 @@
 from collections import defaultdict
 import re
 import Stemmer
-import string
 
 from stopwords import STOPWORDS
 
 STEMMER = Stemmer.Stemmer('english')
 LINK_REGEX = re.compile(r"==External links==.*\n(.+\n)*?[^\n]*(?=\n\n|\[\[Category)")
 INFOBOX_REGEX = re.compile(r"{{Infobox")
-# HTML_REGEX = re.compile(r"<(?!ref)[^/>]*>[^<]*</(?!ref)[a-z0-9]*>|<[^>]*>")
 HTML_REGEX = re.compile(r"<[^>]*>")
 SELF_CLOSING = re.compile(r"<[^>]*/>")
-# INFOBOX_REGEX = re.compile(r"{{Infobox.*\n(.*\n)*?.*(?=\n}}|\n }}|==)")
 BACK_REGEX = re.compile(r"\n\n")
 CLOSE_CURLY_REGEX = re.compile(r"\n}}|\n }}|\n==")
-# REFERENCE_REGEX = re.compile(r"<ref[^>/]*>[^<]*<[^>/]*/(ref)>")
 REFERENCE_REGEX = re.compile(r"==References==.*\n(.+\n)*?[^\n]*(?=(\n\n|\n==))")
 REF_BEGIN_END_REGEX = re.compile(r"{{refbegin}}\n(.+\n)*?(?={{refend}})")
 REF_REGEX = re.compile(r"<ref[^>]*>[^<]*</ref>")
 CATEGORY_REGEX = re.compile(r"\[\[Category:[^]]*]]")
-# URL_REGEX = re.compile(r"http[^ }|]*[ }|]")
 URL_REGEX = re.compile(r"http[^ }|]*[ }|]|[a-z0-9]*\.(svg|png|jpeg|jpg|com|html|gif|pdf)")
 EQUALITY_REGEX = re.compile(r"(\||!) ?[^=|\n}\]]*=")
 GARBAGE_REGEX = re.compile(r"\d+[a-z]+\d|[a-z]+\d+[a-z]|([a-z])\1{2,}")
 SPLIT_REGEX = re.compile(r"[^a-z0-9]+")
-# TABLE = str.maketrans(string.punctuation, " " * len(string.punctuation))
 DOC_ID = ""
 PASSAGE_WEIGHTS = {"t": 6, "i": 3, "c": 2, "r": 1, "l": 1, "b": 1}
 
 
 def remove_stopwords(text: list) -> list:
+    """Stopwords Removal"""
     reduced_words = [word for word in text if word not in STOPWORDS]
     return reduced_words
 
 
 def stemming(text: list) -> list:
+    """Stemming and Cleaning of Stemmed Tokens"""
     stemmed_words = STEMMER.stemWords(text)
     stemmed_words_filtered = [word for word in stemmed_words if word[0:2] != "00" and len(word) <= 20 and (
             (not word.isdigit() and not GARBAGE_REGEX.match(word)) or (len(word) <= 4 and word.isdigit()))]
@@ -42,17 +38,16 @@ def stemming(text: list) -> list:
 
 
 def tokenize(text: str) -> list:
+    """Tokenization of the text"""
     text = HTML_REGEX.sub(r" ", text)
     text = URL_REGEX.sub(r" ", text)
     text = EQUALITY_REGEX.sub(r" ", text)
-    # text = text.translate(TABLE)
     return SPLIT_REGEX.split(text)
-    # return text.split()
 
 
 def token_dict(tokens: list, pos: str, doc_dict: dict) -> dict:
+    """Creating Postings Dict for Each document"""
     count = PASSAGE_WEIGHTS[pos]
-    # doc_dict["DOC_COUNT"] += count * len(tokens)
     for token in tokens:
         if token not in doc_dict:
             doc_dict[token] = defaultdict(int)
@@ -65,6 +60,7 @@ def token_dict(tokens: list, pos: str, doc_dict: dict) -> dict:
 
 
 def parse_string(text: str) -> list:
+    """Processing Text and then tokenizing"""
     text = text.lower()
     tokenized_text = tokenize(text)
     tokenized_text = remove_stopwords(tokenized_text)
@@ -85,6 +81,7 @@ def extract_body(text: str, doc_dict: dict) -> dict:
 
 
 def extract_links(text: str, doc_dict: dict) -> tuple:
+    """Extract External Links"""
     match = LINK_REGEX.search(text)
     if match:
         tokens = parse_string(text[match.start():match.end()])
@@ -95,6 +92,7 @@ def extract_links(text: str, doc_dict: dict) -> tuple:
 
 
 def extract_infobox(text: str, doc_dict: dict) -> tuple:
+    """Extract Infobox"""
     new_text = text
     start_ind = -1
     end_ind = -1
@@ -114,6 +112,7 @@ def extract_infobox(text: str, doc_dict: dict) -> tuple:
 
 
 def extract_categories(text: str, doc_dict: dict) -> tuple:
+    """Extract Categories"""
     for match in CATEGORY_REGEX.finditer(text):
         tokens = parse_string(text[match.start():match.end()])
         doc_dict = token_dict(tokens, "c", doc_dict)
@@ -123,6 +122,7 @@ def extract_categories(text: str, doc_dict: dict) -> tuple:
 
 
 def extract_references(text: str, doc_dict: dict) -> tuple:
+    """Extract References"""
     for match in REF_REGEX.finditer(text):
         tokens = parse_string(text[match.start():match.end()])
         doc_dict = token_dict(tokens, "r", doc_dict)
@@ -145,10 +145,10 @@ def extract_references(text: str, doc_dict: dict) -> tuple:
 
 
 def process_data(ID: int, title: str, text: str) -> dict:
+    """Processing Document text and finding individual Parts of the Text"""
     global DOC_ID
     DOC_ID = str(ID)
     doc_dict = {}
-    # doc_dict = {"DOC_COUNT": 0}
     text = SELF_CLOSING.sub(" ", text)
     doc_dict = parse_title(title, doc_dict)
     text, doc_dict = extract_references(text, doc_dict)

@@ -12,6 +12,8 @@ from processing import process_data
 
 
 class WikiHandler(xml.sax.handler.ContentHandler):
+    """Main Indexing Class"""
+
     def __init__(self, path_to_index: str, path_to_stat: str):
         super().__init__()
         self.index_path = os.path.join(os.getcwd(), path_to_index)
@@ -30,11 +32,10 @@ class WikiHandler(xml.sax.handler.ContentHandler):
         self.title_file_count = 0
         self.titles = []
         self.cur_file_size = 0
-        # self.doc_token_count = []
         self.stage2_first_words = ""
-        # self.total_doc_length = 0
 
     def startElement(self, tag, attributes):
+        """Start tag reading"""
         if tag == "page":
             self.page_start = 1
         elif tag == "title":
@@ -45,6 +46,7 @@ class WikiHandler(xml.sax.handler.ContentHandler):
             self.text_start = 1
 
     def characters(self, content):
+        """Read the text character by character"""
         if self.title_start:
             self.title += content
         elif self.id_start:
@@ -53,6 +55,7 @@ class WikiHandler(xml.sax.handler.ContentHandler):
             self.text += content
 
     def endElement(self, tag):
+        """End tag Reading and create Postings Doc for each document"""
         if tag == "page":
             self.page_start = 0
             self.title = self.title.lower()
@@ -73,14 +76,8 @@ class WikiHandler(xml.sax.handler.ContentHandler):
             self.text_start = 0
 
     def merge_dicts(self, doc_tokens: dict) -> None:
+        """Merge Postings Dict for the documents"""
         for token, val in doc_tokens.items():
-
-            # if token == "DOC_COUNT":
-            #     if flag:
-            #         val //= 100
-            #     self.doc_token_count.append(f"{val}")
-            #     self.total_doc_length += val
-            #     continue
 
             doc_list = list(doc_tokens[token].values())
             doc_string = f"{doc_list[0]}-" + doc_list[1]
@@ -97,6 +94,7 @@ class WikiHandler(xml.sax.handler.ContentHandler):
         self.check_stage(stage=1, is_finish=False)
 
     def index_creator(self, stage: int) -> None:
+        """Write postings list to the files depending on the stage"""
         sorted_global_data = sorted(self.global_data.items())
         index_string = "\n".join([k + " " + v for k, v in sorted_global_data])
         if stage == 2:
@@ -110,6 +108,7 @@ class WikiHandler(xml.sax.handler.ContentHandler):
             f.write(index_string)
 
     def title_index(self) -> None:
+        """Write titles files depending on the stage"""
         title_string = "\n".join(self.titles)
 
         self.title_file_count += 1
@@ -118,12 +117,8 @@ class WikiHandler(xml.sax.handler.ContentHandler):
         with open(path_to_index, 'w') as f:
             f.write(title_string)
 
-        # path_to_doc_count = os.path.join(self.index_path, f'count_{self.title_file_count}.txt')
-        # doc_token_string = "\n".join(self.doc_token_count)
-        # with open(path_to_doc_count, 'w') as f:
-        #     f.write(doc_token_string)
-
     def check_stage(self, stage: int, is_finish: bool) -> None:
+        """Stage Dependent Writing"""
         if (stage == 1 and self.cur_file_size >= 6e7 and not is_finish) or (
                 stage == 2 and self.cur_file_size >= 2e7 and not is_finish) or (is_finish and self.cur_file_size):
             self.index_creator(stage=stage)
@@ -133,9 +128,10 @@ class WikiHandler(xml.sax.handler.ContentHandler):
         if stage == 1 and ((len(self.titles) >= 1e4 and not is_finish) or (len(self.titles) and is_finish)):
             self.title_index()
             self.titles = []
-            # self.doc_token_count = []
 
     def merge_files(self):
+        """Merge stage 1 index files using heaps to create stage 2 index which is smaller, write all extra files
+        needed in searching """
         stage1_file_count = self.file_count
         left_files = stage1_file_count
         self.file_count = 0
@@ -168,19 +164,6 @@ class WikiHandler(xml.sax.handler.ContentHandler):
                     words[file] = line.split(" ", 1)
                     heapq.heappush(heap, (words[file][0], file))
 
-            # for i in range(1, stage1_file_count + 1):
-            #     if is_open[i] and word == words[i][0]:
-            #         postings_list += " " + words[i][1] if len(postings_list) else words[i][1]
-            #         line = files[i].readline().rstrip()
-            #         if line == '':
-            #             is_open[i] = 0
-            #             files[i].close()
-            #             left_files -= 1
-            #         else:
-            #             words[i] = line.split(" ", 1)
-            #             if words[i][0] not in heap:
-            #                 heapq.heappush(heap, words[i][0])
-
             self.global_data[word] = postings_list
             self.cur_file_size += len(word) + len(postings_list)
 
@@ -193,7 +176,9 @@ class WikiHandler(xml.sax.handler.ContentHandler):
 
         output_dir = Path(self.index_path)
         index_file_size = sum(f.stat().st_size for f in output_dir.glob('*') if f.is_file())
-        stat_string = f"Index size in GB: {index_file_size / 1e9}\nNumber of files in which the inverted index is split: {self.file_count + self.title_file_count + 2}\nNumber of tokens in the inverted index: {total_word_count}"
+        stat_string = f"Index size in GB: {index_file_size / 1e9}\nNumber of files in which the inverted index is " \
+                      f"split: {self.file_count + self.title_file_count + 2}\nNumber of tokens in the inverted " \
+                      f"index: {total_word_count} "
         with open(self.stat_path, 'w') as f:
             f.write(stat_string)
 
@@ -204,10 +189,6 @@ class WikiHandler(xml.sax.handler.ContentHandler):
         first_words_path = os.path.join(self.index_path, 'first_words.txt')
         with open(first_words_path, 'w') as f:
             f.write(self.stage2_first_words)
-
-        # average_length_path = os.path.join(self.index_path, 'average_length.txt')
-        # with open(average_length_path, 'w') as f:
-        #     f.write(str(self.total_doc_length / self.total_page_count))
 
 
 def main():

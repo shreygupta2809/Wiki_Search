@@ -10,6 +10,8 @@ from processing import STOPWORDS
 
 
 class SearchHandler:
+    """Main Search Class"""
+
     def __init__(self, index_path: str):
         self.index_path = index_path
         self.file_per_page = 10000
@@ -32,6 +34,7 @@ class SearchHandler:
         self.results = []
 
     def parse_query(self, query: str):
+        """Tokenize Individual Query to find Tokens and Fields"""
         query = query.replace(",", " ").split()
         pos = ''
         self.token_dict = {}
@@ -64,7 +67,8 @@ class SearchHandler:
                 self.token_dict[stemmed_token]["tag"].add(pos)
             else:
                 file_num = bisect.bisect_left(self.first_words, stemmed_token)
-                file_num = file_num + 1 if file_num < len(self.first_words) and self.first_words[file_num] == stemmed_token else file_num
+                file_num = file_num + 1 if file_num < len(self.first_words) and self.first_words[
+                    file_num] == stemmed_token else file_num
                 if file_num in self.token_set:
                     self.token_set[file_num].add(stemmed_token)
                 else:
@@ -73,6 +77,7 @@ class SearchHandler:
                 self.token_dict[stemmed_token] = {"count": 1, "tag": set(pos)}
 
     def parse_query_file(self, query_file: str):
+        """Parse Individual Query for Searching and display final results"""
         final_op = ""
         with open(query_file, 'r') as f:
             for _query in f:
@@ -107,6 +112,7 @@ class SearchHandler:
             f.write(final_op)
 
     def get_doc_score(self) -> None:
+        """Calculate Score for each doc by summation of score of each word"""
         for file_num, docs in self.doc_file_map.items():
             if len(docs) == 0:
                 continue
@@ -123,10 +129,12 @@ class SearchHandler:
         self.doc_score = sorted(self.doc_score, key=lambda x: x[1], reverse=True)[:self.search_results]
 
     def scoring_func(self, tf: float, idf: float) -> float:
+        """Scoring Function BM-15"""
         k1 = 1.2
         return idf * (1 + (tf * (k1 + 1)) / (tf + k1))
 
     def get_titles(self) -> None:
+        """Get titles for each document"""
         for doc, score in self.doc_score:
             file_num = (doc - 1) // self.file_per_page + 1
             title_path = os.path.join(self.index_path, f"title_{file_num}.txt")
@@ -135,18 +143,8 @@ class SearchHandler:
 
             self.results.append(f"{doc}, {score}, " + lines[(doc - 1) % self.file_per_page].rstrip())
 
-    # def get_document_fre(self) -> None:
-    #     for file_num, docs in self.doc_file_map.items():
-    #         if len(docs) == 0:
-    #             continue
-    #         count_path = os.path.join(self.index_path, f"count_{file_num}.txt")
-    #         with open(count_path, 'r') as f:
-    #             lines = f.readlines()
-    #         for d in docs:
-    #             self.doc_fre[d] = int(
-    #                 lines[(d - 1) % self.file_per_page].rstrip())
-
     def get_index(self) -> None:
+        """Read index to get desired documents and posting lists"""
         for file, stem_words in self.token_set.items():
             if file == 0:
                 continue
@@ -165,7 +163,7 @@ class SearchHandler:
                     docs = {doc_id: int(doc[0]) for _doc in token_line if
                             (doc := _doc.split("-")) != "" and (doc_id := int(doc[1])) != "" and (
                                     self.token_dict[word]["tag"].issubset(doc[-1]) or (
-                                    self.token_dict[word]["tag"] == {"b"} and len(doc) <= 2))}
+                                        self.token_dict[word]["tag"] == {"b"} and len(doc) <= 2))}
 
                     [self.doc_file_map[f"{(d - 1) // self.file_per_page + 1}"].add(d) for d in docs]
                     if word not in self.idf:
