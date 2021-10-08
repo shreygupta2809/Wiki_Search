@@ -1,0 +1,3 @@
+Index size in GB: 16.641791753
+Number of files in which the inverted index is split: 2346
+Number of tokens in the inverted index: 11635193
